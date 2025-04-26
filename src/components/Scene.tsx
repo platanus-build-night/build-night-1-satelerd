@@ -2,8 +2,8 @@
 
 import * as THREE from 'three'; // Importar THREE completo
 import { Canvas, useThree } from '@react-three/fiber'; // Importar Canvas y useThree
-import { PointerLockControls, Html } from '@react-three/drei'; // Quitar OrbitControls
-import { useRef, useState, useEffect } from 'react'; // Necesitamos useEffect
+import { PointerLockControls, Html } from '@react-three/drei'; // Importar el componente para usar typeof
+import { useRef, useState, useEffect, useMemo } from 'react'; // Necesitamos useEffect y useMemo
 import Stars from './Stars'; // Importar el nuevo componente
 import WavyGround from './WavyGround'; // Importar suelo ondulado
 import Player from './Player'; // Importar el nuevo componente Player
@@ -11,13 +11,15 @@ import Mountains from './Mountains'; // Importar Montañas
 import Portal from './Portal'; // Importar el Portal
 import MobilePlayer from './MobilePlayer'; // Importar el nuevo componente MobilePlayer
 import { EffectComposer, Bloom } from '@react-three/postprocessing'; // <-- IMPORTAR EFECTOS
+import SphericalGrid from './SphericalGrid'; // <-- IMPORTAR GRID ESFÉRICO OTRA VEZ
+import YearLabels from './YearLabels'; // <-- IMPORTAR ETIQUETAS DE AÑO
 
-// Definir la interfaz para los datos que esperamos recibir
-// ... (interfaz Contribution)
+// Definir interfaces (asegurar que Contribution incluye 'year')
 interface Contribution {
   date: string;
   count: number;
   weekday: number;
+  year: number; // <-- Asegurarse de que está aquí
 }
 
 // Tipos para los datos del Joystick (importados o definidos en page.tsx)
@@ -35,7 +37,14 @@ interface SceneProps {
   onCanInteractChange: (canInteract: boolean) => void; // Callback para estado de interacción
   moveJoystick: JoystickData; // Añadir prop
   lookJoystick: JoystickData; // Añadir prop
-  onStarHover: (data: TooltipData | null) => void; // <-- Añadir prop
+  onStarHover: (data: TooltipData | null) => void; // <-- Mantener esta prop para actualizar el HUD
+}
+
+// Interfaz para los datos del tooltip (puede ir en otro sitio)
+interface TooltipData {
+    date: string;
+    count: number;
+    year?: number; // <-- Añadir año (opcional por si acaso)
 }
 
 // Componente interno para manejar la lógica dependiente del contexto de R3F
@@ -43,17 +52,96 @@ function SceneContent({
     contributions, 
     onInteract, 
     onCanInteractChange, 
-    moveJoystick, // Recibir prop
-    lookJoystick, // Recibir prop
-    onStarHover // <-- Recibir prop
+    moveJoystick, 
+    lookJoystick, 
+    onStarHover // <-- Recibir prop para actualizar HUD
 }: SceneProps) {
-  const { gl, camera } = useThree(); // Hook para acceder al contexto R3F
+  const { gl, camera } = useThree(); // <-- Obtener solo gl y camera aquí
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const controlsRef = useRef<any>(null); // Mantener any por ahora, PointerLockControls es difícil de tipar
+  const controlsRef = useRef<any>(null); // <-- Volver a any para simplificar
   const groundRef = useRef<THREE.Mesh>(null!);
   const portalRef = useRef<THREE.Group>(null!);
-  const [isLocked, setIsLocked] = useState(false); // Solo para PointerLock
+  const invisibleArcSurfaceRef = useRef<THREE.Mesh>(null!); // <-- Ref para la superficie invisible
+  const [isLocked, setIsLocked] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const starRadius = 200; 
+
+  // Re-calcular segmentos de año para el mapeo inverso del tooltip
+  const yearSegments = useMemo(() => {
+      if (!contributions || contributions.length === 0) return [];
+      const segments: { year: number; startIndex: number; count: number }[] = [];
+      let currentYear = 0;
+      let startIndex = 0;
+      contributions.forEach((contrib, index) => {
+          if (contrib.year !== currentYear) {
+              if (currentYear !== 0) {
+                  segments.push({ year: currentYear, startIndex, count: index - startIndex });
+              }
+              currentYear = contrib.year;
+              startIndex = index;
+          }
+      });
+      if (currentYear !== 0) {
+          segments.push({ year: currentYear, startIndex, count: contributions.length - startIndex });
+      }
+      segments.sort((a, b) => a.year - b.year);
+      return segments;
+  }, [contributions]);
+
+  // --- Lógica de Tooltip por Celda --- 
+  const lastHoveredIndex = useRef<number | null>(null);
+
+  const handlePointerMoveOnArc = (event: THREE.Intersection) => {
+      // Necesitamos yearSegments calculados
+      if (!event || !contributions || contributions.length === 0 || !yearSegments || yearSegments.length === 0) return;
+
+      const point = event.point;
+
+      // Replicar constantes de Stars.tsx
+      const arcBaseHeight = 5;
+      const daySpread = 60;
+      const arcSpacing = daySpread * 7 * 1.2; // Mismo cálculo que en Stars/Grid
+      const numberOfArcs = yearSegments.length;
+
+      // --- Mapeo Inverso --- 
+      // 1. Calcular a qué arco (año) corresponde el punto X
+      const approxArcIndex = Math.round((point.x / arcSpacing) + Math.floor(numberOfArcs / 2));
+      const targetArcIndex = Math.max(0, Math.min(numberOfArcs - 1, approxArcIndex));
+      const segment = yearSegments[targetArcIndex];
+      if (!segment) return; // Seguridad
+
+      // 2. Calcular Y, Z -> angle -> relative_t (0 a 1 dentro del año)
+      // atan2(z, y - arcBaseHeight) = angle = (t - 0.5) * PI
+      const angle = Math.atan2(point.z, point.y - arcBaseHeight);
+      const relative_t = (angle / Math.PI) + 0.5;
+
+      // 3. Calcular índice del día DENTRO del año
+      const approxDayIndexInYear = relative_t * (segment.count - 1);
+
+      // 4. Calcular índice GLOBAL en el array contributions
+      const dayIndexWithinYear = Math.max(0, Math.min(segment.count - 1, Math.round(approxDayIndexInYear)));
+      const globalDayIndex = segment.startIndex + dayIndexWithinYear;
+
+      // --- Evitar actualizaciones innecesarias --- 
+      if (globalDayIndex === lastHoveredIndex.current) return;
+      lastHoveredIndex.current = globalDayIndex;
+
+      // --- Buscar Contribución y Actualizar HUD --- 
+      const contribution = contributions[globalDayIndex];
+      if (contribution) {
+          onStarHover({ date: contribution.date, count: contribution.count, year: contribution.year });
+      } else {
+          // console.log(`Contribution NOT found for global index: ${globalDayIndex}`); // Comentado
+          onStarHover(null); // No debería pasar si los índices están bien
+      }
+  };
+
+  const handlePointerOutOfArc = () => {
+      if (lastHoveredIndex.current !== null) {
+         lastHoveredIndex.current = null;
+         onStarHover(null);
+      }
+  };
 
   // Detección simple de móvil (podría mejorarse)
   useEffect(() => {
@@ -95,6 +183,24 @@ function SceneContent({
 
   return (
     <>
+      {/* Superficie invisible para raycasting del tooltip */}
+      <mesh 
+         ref={invisibleArcSurfaceRef} 
+         visible={false} // Invisible
+         onPointerMove={(e) => {
+             // Detener propagación para no interferir con otras interacciones si es necesario
+             // e.stopPropagation(); 
+             // Pasar solo la primera intersección al handler
+             if(e.intersections.length > 0) handlePointerMoveOnArc(e.intersections[0]);
+         }}
+         onPointerOut={handlePointerOutOfArc}
+      >
+          {/* Usar una esfera grande como aproximación del arco */}
+          {/* Ajustar el radio si es necesario para que coincida mejor */}
+          <sphereGeometry args={[starRadius * 1.2, 32, 32]} />{/* Radio ligeramente mayor? */}
+          <meshBasicMaterial side={THREE.DoubleSide} />
+      </mesh>
+
       {/* Envolver contenido 3D con EffectComposer */} 
       <EffectComposer>
         {/* Añadir Niebla */} 
@@ -113,16 +219,28 @@ function SceneContent({
         />
 
         {/* Renderizar las estrellas */} 
-        <Stars contributions={contributions} onStarHover={onStarHover} />
+        <Stars contributions={contributions} radius={starRadius} />
 
-        {/* Suelo ondulado - Comentado para debug de tooltip */} 
-        <WavyGround ref={groundRef} />
+        {/* Añadir la cuadrícula adaptada al arcoiris vertical */}
+        <SphericalGrid 
+            radius={starRadius} 
+            latitudeLines={7} // Días semana
+            longitudeLines={Math.ceil((contributions.length || 366) / 7)} // Calcular dinámicamente
+            totalDays={contributions.length || 366} // Pasar total días real si está disponible
+            color="#181818" // Un poco más oscuro
+        />
+
+        {/* Añadir las etiquetas de año */}
+        <YearLabels contributions={contributions} radius={starRadius} />
+
+        {/* Suelo ondulado */} 
+        <WavyGround ref={groundRef} contributions={contributions} />
 
         {/* Montañas */} 
-        <Mountains count={60} radius={350} />
+        <Mountains count={120} radius={400} />
 
-        {/* Portal de interacción */} 
-        <Portal ref={portalRef} />
+        {/* Portal de interacción - Añadir prop de posición */} 
+        <Portal ref={portalRef} position={[0, 15, -50]} />
 
         {/* Efecto Bloom */} 
         <Bloom 
@@ -183,7 +301,12 @@ export default function Scene({
     <div style={{ width: '100%', height: '100%' }}>
         <Canvas
             style={{ background: '#0A0A18' }}
-            camera={{ fov: 75, position: [0, playerHeight, 0] }} // Posición inicial ligeramente elevada
+            camera={{ 
+                fov: 90, 
+                position: [0, playerHeight, 0], 
+                near: 0.1, // Plano cercano (mantener default)
+                far: 5000 // Aumentar plano lejano significativamente
+            }}
             shadows
         >
            <SceneContent 
@@ -213,10 +336,4 @@ const overlayStyle: React.CSSProperties = {
 // Constantes movidas fuera si es posible
 const playerHeight = 5;
 const interactDistance = 20;
-
-// Definir TooltipData aquí también o importarla
-interface TooltipData {
-    date: string;
-    count: number;
-}
  

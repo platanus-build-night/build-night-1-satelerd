@@ -9,17 +9,21 @@ interface PortalProps {
 }
 
 // Materiales
-const material1 = new THREE.MeshStandardMaterial({ color: '#0055FF', emissive: '#0033DD', emissiveIntensity: 0.8, roughness: 0.2, metalness: 0.1 });
+// const material1 = new THREE.MeshStandardMaterial({ color: '#0055FF', emissive: '#0033DD', emissiveIntensity: 0.8, roughness: 0.2, metalness: 0.1 });
+const material1 = new THREE.MeshBasicMaterial({ color: '#0077FF', wireframe: true });
 const particleMaterial = new THREE.MeshStandardMaterial({ color: '#FFFFFF', emissive: '#FFFFFF', emissiveIntensity: 1 });
+const innerObjectMaterial = new THREE.MeshNormalMaterial(); // <-- Material para objeto interior
 
 const Portal = forwardRef<THREE.Group, PortalProps>(({ position = [0, 10, -50] }, ref) => {
     const knotRef = useRef<THREE.Mesh>(null!);
     const particlesRef = useRef<THREE.InstancedMesh>(null!);
     const groupRef = useRef<THREE.Group>(null!); // Ref interna para el grupo de partículas
+    const innerObjectRef = useRef<THREE.Mesh>(null!); // <-- Ref para objeto interior
 
     // Geometrías
     const knotGeometry = useMemo(() => new THREE.TorusKnotGeometry(6, 0.8, 100, 16), []);
     const sphereGeometry = useMemo(() => new THREE.SphereGeometry(0.3, 8, 8), []);
+    const innerGeometry = useMemo(() => new THREE.IcosahedronGeometry(3, 1), []); // <-- Geometría interior (Icosaedro detallado)
     const particleCount = 50;
 
     // Posiciones iniciales para partículas (en una esfera)
@@ -46,6 +50,12 @@ const Portal = forwardRef<THREE.Group, PortalProps>(({ position = [0, 10, -50] }
             knotRef.current.rotation.z -= delta * 0.1;
         }
 
+        // Rotar objeto interior
+        if (innerObjectRef.current) {
+            innerObjectRef.current.rotation.x += delta * 0.5;
+            innerObjectRef.current.rotation.y -= delta * 0.3;
+        }
+
         // Animar partículas
         if (particlesRef.current && groupRef.current) {
             groupRef.current.rotation.y += delta * 0.15; // Rotar el grupo contenedor
@@ -65,8 +75,22 @@ const Portal = forwardRef<THREE.Group, PortalProps>(({ position = [0, 10, -50] }
     return (
         // Group principal con la ref externa y posición
         <group ref={ref} position={position}>
-            <mesh ref={knotRef} geometry={knotGeometry} material={material1} />
+            {/* Nudo más grande */}
+            <mesh 
+                ref={knotRef} 
+                geometry={knotGeometry} 
+                material={material1} 
+                scale={1.5} // <-- Escalar el nudo
+            />
             
+            {/* Objeto interior abstracto */}
+            <mesh 
+                ref={innerObjectRef} 
+                geometry={innerGeometry} 
+                material={innerObjectMaterial} 
+                // Posición en el centro (0,0,0 relativo al grupo)
+            />
+
             {/* Grupo interno para rotar partículas independientemente */}
             <group ref={groupRef}>
                 <instancedMesh ref={particlesRef} args={[sphereGeometry, particleMaterial, particleCount]} />

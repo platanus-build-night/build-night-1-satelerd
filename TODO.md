@@ -41,7 +41,21 @@ Plan de desarrollo por fases. Cada fase completada representa un punto de contro
 - [X] **Fase 6: Pulido & FX**
     - [X] Añadir efecto Bloom con `@react-three/postprocessing`.
     - [X] Implementar tooltips en estrellas (hover en desktop) mostrando fecha y contribuciones en HUD.
-- [ ] **Fase 7: Deploy & demo**
+- [X] **Fase 7: Perfeccionamiento Estelar ✨**
+    - [X] Implementar mapeo esférico (arcos verticales).
+    - [ ] Diferenciar estrellas por `count` (color/brillo inicial).
+    - [X] Añadir sutil efecto "twinkling" (parpadeo).
+    - [X] Revisar y ajustar funcionamiento de tooltips con mapeo esférico.
+    - [X] Mejorar montañas (geometría, variedad, culling).
+    - [X] Ajustar tamaño de suelo a datos.
+    - [X] Añadir salto (barra espaciadora).
+    - [X] Refinar portal (wireframe, objeto interior, posición).
+    - [X] Corregir estilo input modal.
+- [ ] **Fase 8: Exploración y Ambiente Cósmico 🌌**
+    - [ ] Implementar estrellas fugaces aleatorias.
+    - [ ] Añadir sonido ambiental espacial.
+    - [ ] (Idea/Opcional) Añadir pequeños secretos/coleccionables.
+- [ ] **Fase 9: Deploy & Demo** (Antigua Fase 7)
     - [ ] Realizar el despliegue final a Vercel.
     - [ ] Configurar la variable de entorno `GITHUB_TOKEN` en Vercel.
     - [ ] Asegurar que la aplicación funciona en la URL pública.

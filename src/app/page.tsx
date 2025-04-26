@@ -10,6 +10,7 @@ interface Contribution {
   date: string;
   count: number;
   weekday: number;
+  year: number;
 }
 
 // Tipos para los datos del Joystick (simplificado)
@@ -24,6 +25,7 @@ interface JoystickData {
 interface TooltipData {
     date: string;
     count: number;
+    year?: number;
 }
 
 // Importamos el componente Scene dinámicamente y deshabilitamos SSR
@@ -183,6 +185,7 @@ export default function Home() {
       {hoveredStarData && (
           <div style={starTooltipStyle}>
               <div>Date: {hoveredStarData.date}</div>
+              {hoveredStarData.year && <div>Year: {hoveredStarData.year}</div>}
               <div>Contributions: {hoveredStarData.count}</div>
           </div>
       )}
@@ -256,10 +259,11 @@ const modalContentStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
     padding: '10px',
-    color: '#333',
+    color: '#FFFFFF',
     borderRadius: '4px',
     border: '1px solid #555',
     fontSize: '16px',
+    backgroundColor: '#444'
 };
 
 const buttonStyle: React.CSSProperties = {

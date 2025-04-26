@@ -3,60 +3,56 @@
 import * as THREE from 'three';
 import { useMemo, useRef, useEffect } from 'react';
 
-// Geometría base para las montañas (cono) - ELIMINAR ESTA CONSTANTE
-// const mountainGeometry = new THREE.ConeGeometry(20, 60, 8);
+// Geometría base para las montañas (cono) - ELIMINAR ESTA CONSTANTE - YA NO SE USA
 
-// Material base - AHORA habilitamos vertexColors
+// Material base - AHORA habilitamos vertexColors - ACTUALIZACIÓN: Quitamos vertexColors y usamos flatShading
 const mountainMaterial = new THREE.MeshStandardMaterial({
-  // color: 0xaaaaaa, // El color base viene de los vértices
+  color: 0x9999AA, // Un color base gris-azulado para roca
   roughness: 0.9,
   metalness: 0.1,
-  vertexColors: true // *** Habilitar Vertex Colors ***
+  // vertexColors: true // *** Quitar Vertex Colors ***
+  flatShading: true, // *** Añadir Flat Shading ***
 });
 
-const snowColor = new THREE.Color(0xffffff);
-const rockColor = new THREE.Color(0x888899);
-const tempColor = new THREE.Color();
+// Quitar lógica de colores de vértice (ya no se usa)
+// const snowColor = new THREE.Color(0xffffff);
+// const rockColor = new THREE.Color(0x888899);
+// const tempColor = new THREE.Color();
 
 interface MountainsProps {
   count?: number; // Cuántas montañas generar
   radius?: number; // Radio del anillo donde se distribuyen
 }
 
-export default function Mountains({ count = 50, radius = 400 }: MountainsProps) {
+// Ajustar parámetros para más montañas y mayor dispersión
+const INNER_RING_RATIO = 0.7; // Porcentaje de montañas en el anillo cercano
+const OUTER_RADIUS_FACTOR = 2.5; // Qué tan lejos pueden llegar las montañas exteriores
+
+export default function Mountains({ count = 120, radius = 400 }: MountainsProps) { // Aumentar count por defecto
   const meshRef = useRef<THREE.InstancedMesh>(null!);
 
   // Geometría base - se crea y usa aquí
   const baseGeometry = useMemo(() => {
-      const baseRadius = 20;
-      const baseHeight = 60;
-      const radialSegments = 8;
-      const heightSegments = 4; // Añadir segmentos en altura para la transición de color
-      const geo = new THREE.ConeGeometry(baseRadius, baseHeight, radialSegments, heightSegments);
+      // Usar DodecahedronGeometry
+      const baseRadius = 15; // Ajustar radio base para la nueva geometría
+      const detail = 0; // 0 para el dodecaedro base
+      const geo = new THREE.DodecahedronGeometry(baseRadius, detail);
 
-      // Calcular colores de vértice para la geometría base
-      const positions = geo.attributes.position;
-      const colors = new Float32Array(positions.count * 3);
-      const vertex = new THREE.Vector3();
-      const snowLineFactor = 0.6; // A partir de qué % de altura empieza la nieve
+      // Eliminar cálculo de colores de vértice
+      // const positions = geo.attributes.position;
+      // const colors = new Float32Array(positions.count * 3);
+      // const vertex = new THREE.Vector3();
+      // const snowLineFactor = 0.6;
+      // ... (código de color eliminado) ...
+      // geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      
+      // Asegurarse de que las normales estén calculadas (puede que no sea necesario para flat shading)
+      geo.computeVertexNormals(); 
 
-      for (let i = 0; i < positions.count; i++) {
-          vertex.fromBufferAttribute(positions, i);
-          // Normalizar altura del vértice (Y local / altura total) - va de -0.5 a 0.5 aprox
-          const normalizedHeight = vertex.y / baseHeight + 0.5;
-
-          // Interpolar color
-          const colorFactor = Math.max(0, Math.min(1, (normalizedHeight - snowLineFactor) / (1 - snowLineFactor)));
-          tempColor.lerpColors(rockColor, snowColor, colorFactor);
-          colors[i * 3] = tempColor.r;
-          colors[i * 3 + 1] = tempColor.g;
-          colors[i * 3 + 2] = tempColor.b;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       return geo;
   }, []);
 
-  // Calcular posiciones y escalas aleatorias para las montañas
+  // Calcular posiciones y escalas aleatorias
   const instances = useMemo(() => {
     const temp = [];
     const matrix = new THREE.Matrix4();
@@ -65,40 +61,71 @@ export default function Mountains({ count = 50, radius = 400 }: MountainsProps) 
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
 
-    for (let i = 0; i < count; i++) {
-      // Posición aleatoria en un anillo
+    const innerCount = Math.floor(count * INNER_RING_RATIO);
+    const outerCount = count - innerCount;
+
+    // 1. Montañas del Anillo Interior (como antes)
+    for (let i = 0; i < innerCount; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const r = radius * (0.8 + Math.random() * 0.4); // Variar radio
+      const r = radius * (0.8 + Math.random() * 0.4);
       position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
 
-      // Escala aleatoria MÁS VARIADA
-      const scaleFactorX = 1.0 + Math.random() * 2.5; // Más anchas o estrechas
-      const scaleFactorY = 1.5 + Math.random() * 3.0; // Variación significativa de altura
+      const scaleFactorX = 1.0 + Math.random() * 2.5;
+      const scaleFactorY = 1.5 + Math.random() * 4.0; // Aumentar un poco la altura máxima aquí también
       scale.set(scaleFactorX, scaleFactorY, scaleFactorX);
 
-      // Rotación aleatoria en Y
       rotation.set(0, Math.random() * Math.PI, 0);
       quaternion.setFromEuler(rotation);
 
-      // Componer la matriz de instancia
       matrix.compose(position, quaternion, scale);
       temp.push(matrix.clone());
     }
+
+    // 2. Montañas Exteriores Dispersas
+    for (let i = 0; i < outerCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      // Radio mayor y más variable, asegurando que esté más allá del anillo interior
+      const r = radius * (1.5 + Math.random() * (OUTER_RADIUS_FACTOR - 1.5)); 
+      position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+
+      // Permitir que las montañas exteriores sean MÁS GRANDES
+      const scaleFactorX = 1.5 + Math.random() * 3.5; 
+      const scaleFactorY = 2.5 + Math.random() * 6.0; // Rango de altura significativamente mayor
+      scale.set(scaleFactorX, scaleFactorY, scaleFactorX);
+
+      rotation.set(0, Math.random() * Math.PI, 0);
+      quaternion.setFromEuler(rotation);
+
+      matrix.compose(position, quaternion, scale);
+      temp.push(matrix.clone());
+    }
+
     return temp;
   }, [count, radius]);
 
-  // Actualizar matrices en InstancedMesh
+  // Actualizar matrices en InstancedMesh (sin cambios)
   useEffect(() => {
     if (!meshRef.current) return;
+    // Asegurarse de que el tamaño del InstancedMesh coincida con el count total
+    if (meshRef.current.count !== count) {
+        meshRef.current.instanceMatrix.needsUpdate = true; // Forzar update si el count cambia
+    } 
+    meshRef.current.count = instances.length; // Establecer el count correcto
     instances.forEach((matrix, i) => {
       meshRef.current.setMatrixAt(i, matrix);
     });
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    meshRef.current.count = instances.length;
-  }, [instances]);
+    meshRef.current.instanceMatrix.needsUpdate = true; 
+  }, [instances, count]); // Añadir count a las dependencias
 
   return (
-    // Usar la baseGeometry con colores precalculados
-    <instancedMesh ref={meshRef} args={[baseGeometry, mountainMaterial, count]} castShadow receiveShadow />
+    // Usar la baseGeometry actualizada y añadir frustumCulled={false}
+    <instancedMesh 
+        ref={meshRef} 
+        // Pasar el count total aquí también en la creación inicial
+        args={[baseGeometry, mountainMaterial, count]} 
+        castShadow 
+        receiveShadow 
+        frustumCulled={false} // *** Añadir Frustum Culling = false ***
+    />
   );
 } 
