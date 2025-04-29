@@ -55,8 +55,8 @@ Plan de desarrollo por fases. Cada fase completada representa un punto de contro
     - [ ] Implementar estrellas fugaces aleatorias.
     - [ ] Añadir sonido ambiental espacial.
     - [ ] (Idea/Opcional) Añadir pequeños secretos/coleccionables.
-- [ ] **Fase 9: Deploy & Demo** (Antigua Fase 7)
-    - [ ] Realizar el despliegue final a Vercel.
-    - [ ] Configurar la variable de entorno `GITHUB_TOKEN` en Vercel.
-    - [ ] Asegurar que la aplicación funciona en la URL pública.
-    - [ ] Preparar demo. 
+- [ ] **Fase 9: Multiplayer**
+    - [ ] Añadir soporte para múltiples jugadores.
+    - [ ] Añadir soporte para múltiples mundos.
+    - [ ] Añadir soporte para múltiples universos.
+    - [ ] Añadir soporte para múltiples galaxias.
